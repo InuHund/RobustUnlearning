@@ -151,7 +151,11 @@ class RLHFArguments:
         default = 1.0,
         metadata = {"help": "KL_coeff for the npo, ga or simpo loss"}
     )
-    npo_loss: Literal["npo","npo_KL","npo_grad_diff"] = field(
+    simnpo_gamma: float = field(
+        default=0.0,
+        metadata={"help": "Margin parameter gamma for SimNPO loss"}
+    )
+    npo_loss: Literal["npo","npo_KL","npo_grad_diff","simnpo","simnpo_KL","simnpo_grad_diff"] = field(
         default='npo_grad_diff',
         metadata = {"help": "Select the loss type for the NPO loss"}
     )

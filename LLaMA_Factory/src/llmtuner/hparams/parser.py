@@ -330,7 +330,8 @@ def get_infer_args(args: Optional[Dict[str, Any]] = None) -> _INFER_CLS:
     if model_args.export_dir is not None:
         model_args.device_map = {"": torch.device(model_args.export_device)}
     else:
-        model_args.device_map = "auto"
+        if not training_args.deepspeed:
+            model_args.device_map = "auto"
 
     return model_args, data_args, finetuning_args, generating_args
 

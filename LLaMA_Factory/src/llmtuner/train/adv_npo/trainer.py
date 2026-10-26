@@ -41,6 +41,7 @@ class LATSFTTrainer(Trainer):
         self.keep_in_eval = finetuning_args.adv_npo_keep_in_eval
         self.perturb_target = finetuning_args.adv_npo_perturb_target
 
+        self.simnpo_gamma = getattr(finetuning_args, "simnpo_gamma", 0.0)
         self.npo_coeff = finetuning_args.npo_coeff
         self.grad_diff_coeff = finetuning_args.grad_diff
         self.KL_coeff = finetuning_args.KL_coeff
@@ -298,6 +299,35 @@ class LATSFTTrainer(Trainer):
             # minimum KL divergence
             retain_loss = nn.functional.kl_div(current_probs, retain_probs, reduction='batchmean', log_target=True)
 
+            loss = self.npo_coeff * forget_loss + self.KL_coeff * retain_loss
+        elif self.loss_type == 'simnpo':
+            loss, outputs = self.compute_adv_loss(model, forget_inputs, True)
+            forget_loss_current = self.get_batch_loss(outputs.logits, forget_inputs['labels'])
+            seq_len = (forget_inputs['labels'] != -100).sum(dim=-1).float().clamp(min=1)
+            normalized_loss = forget_loss_current / seq_len
+            forget_loss = -F.logsigmoid(-self.beta * normalized_loss - self.simnpo_gamma).mean()
+            loss = forget_loss
+        elif self.loss_type == 'simnpo_grad_diff':
+            loss, outputs = self.compute_adv_loss(model, forget_inputs, True)
+            forget_loss_current = self.get_batch_loss(outputs.logits, forget_inputs['labels'])
+            seq_len = (forget_inputs['labels'] != -100).sum(dim=-1).float().clamp(min=1)
+            normalized_loss = forget_loss_current / seq_len
+            forget_loss = -F.logsigmoid(-self.beta * normalized_loss - self.simnpo_gamma).mean()
+            retain_outputs = model(retain_input_ids, labels=retain_labels, attention_mask=retain_attention_mask)
+            retain_loss = retain_outputs.loss
+            loss = self.npo_coeff * forget_loss + self.grad_diff_coeff * retain_loss
+        elif self.loss_type == 'simnpo_KL':
+            loss, outputs = self.compute_adv_loss(model, forget_inputs, True)
+            forget_loss_current = self.get_batch_loss(outputs.logits, forget_inputs['labels'])
+            seq_len = (forget_inputs['labels'] != -100).sum(dim=-1).float().clamp(min=1)
+            normalized_loss = forget_loss_current / seq_len
+            forget_loss = -F.logsigmoid(-self.beta * normalized_loss - self.simnpo_gamma).mean()
+            with torch.no_grad():
+                retain_outputs = self.ref_model(retain_input_ids, labels=retain_labels, attention_mask=retain_attention_mask)
+            retain_probs = F.log_softmax(retain_outputs.logits, dim=-1).view(-1, retain_outputs.logits.shape[-1])
+            current_outputs = model(retain_input_ids, labels=retain_labels, attention_mask=retain_attention_mask)
+            current_probs = F.log_softmax(current_outputs.logits, dim=-1).view(-1, current_outputs.logits.shape[-1])
+            retain_loss = nn.functional.kl_div(current_probs, retain_probs, reduction='batchmean', log_target=True)
             loss = self.npo_coeff * forget_loss + self.KL_coeff * retain_loss
         else:
             raise NotImplementedError(f"{self.loss_type} loss type not implemented!")

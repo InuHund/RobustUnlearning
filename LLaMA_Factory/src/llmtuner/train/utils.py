@@ -104,6 +104,8 @@ def create_ref_model(
             ref_model = load_model(
                 tokenizer, model_args, finetuning_args, is_trainable=False, add_valuehead=add_valuehead
             )
+            # Save memory by keeping ref_model in half precision and on CPU when not in use
+            ref_model = ref_model.half()
             logger.info("Created reference model from the model itself.")
 
     return ref_model
