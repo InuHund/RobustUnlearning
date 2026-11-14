@@ -50,7 +50,9 @@ def eval_mia(model, tokenizer, forget, output_result_dir=None, use_prompt=False)
             scores[f'mink_{ratio}'].append(np.mean(topk).item())
 
         ## mink++
-        mink_plus = (token_log_probs - mu) / sigma.sqrt()
+        sigma_safe = sigma.clamp(min=1e-8)
+        mink_plus = (token_log_probs - mu) / sigma_safe.sqrt()
+        mink_plus = torch.nan_to_num(mink_plus, nan=0.0, posinf=0.0, neginf=0.0)
         for ratio in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]:
             k_length = int(len(mink_plus) * ratio)
             topk = np.sort(mink_plus.cpu())[:k_length]
